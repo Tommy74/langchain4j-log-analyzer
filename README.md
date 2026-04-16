@@ -54,6 +54,11 @@ The generated report is printed to stdout and saved to `report.md`.
 The integration test uses [Testcontainers](https://testcontainers.com/) to spin up an Ollama container, pull the `qwen3:0.6b` model, and run the full 3-agent pipeline against a mock log server. Requires Docker.
 
 ```bash
+systemctl --user daemon-reload
+systemctl --user start podman.socket
+export DOCKER_HOST=unix:///run/user/$UID/podman/podman.sock
+#We're not running podman privileged
+export TESTCONTAINERS_RYUK_DISABLED=true
 mvn verify
 ```
 
