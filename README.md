@@ -1,12 +1,16 @@
 # LangChain4j Log Analyzer
 
-A 3-agent sequential workflow built with [LangChain4j](https://github.com/langchain4j/langchain4j) that downloads log files from a URL, analyzes them for errors, and generates a structured Markdown report.
+A 3-agent sequential workflow built with [LangChain4j](https://github.com/langchain4j/langchain4j) and the [langchain4j-agentic](https://github.com/langchain4j/langchain4j/blob/main/docs/docs/tutorials/agents.md) framework that downloads log files from a URL, analyzes them for errors, and generates a structured Markdown report.
 
 ## Agents
+
+The pipeline is composed as a sequential workflow using `AgenticServices.sequenceBuilder()`:
 
 1. **LogCollectorAgent** - Downloads log file content from a user-supplied URL using an HTTP tool
 2. **LogAnalyzerAgent** - Analyzes raw logs to extract errors, warnings, stack traces, and recurring patterns
 3. **ReportGeneratorAgent** - Produces a well-formatted Markdown report from the analysis
+
+A top-level **LogAgent** interface orchestrates the sequence, and each agent is wired with an `AgentListener` that logs invocation start/end for observability.
 
 ## Prerequisites
 
@@ -49,9 +53,22 @@ mvn exec:java -Dexec.args="https://example.com/path/to/logfile.log"
 
 The generated report is printed to stdout and saved to `report.md`.
 
+## Programmatic Usage
+
+The pipeline logic is available as a static method for embedding in other code or tests:
+
+```java
+ChatModel model = OllamaChatModel.builder()
+        .baseUrl("http://localhost:11434")
+        .modelName("llama3.1")
+        .build();
+
+String report = LogAnalyzerApp.analyzeLogs("https://example.com/logfile.log", model);
+```
+
 ## Integration Test
 
-The integration test uses [Testcontainers](https://testcontainers.com/) to spin up an Ollama container, pull the `qwen3:0.6b` model, and run the full 3-agent pipeline against a mock log server. Requires Docker.
+The integration test uses [Testcontainers](https://testcontainers.com/) to spin up an Ollama container, pull the `qwen3:0.6b` model, and run the full pipeline against a mock log server. Requires Docker.
 
 ```bash
 systemctl --user daemon-reload
@@ -65,5 +82,5 @@ mvn verify
 This runs `LogAnalyzerPipelineIT` which:
 1. Starts an Ollama container and pulls a small model
 2. Starts an embedded HTTP server serving sample log content
-3. Runs all 3 agents in sequence
+3. Calls `LogAnalyzerApp.analyzeLogs()` with the Ollama model
 4. Asserts the pipeline produces a non-empty Markdown report

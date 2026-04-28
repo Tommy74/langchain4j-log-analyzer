@@ -1,19 +1,29 @@
 package com.example.loganalyzer;
 
+import com.example.loganalyzer.agent.LogAgent;
 import com.example.loganalyzer.agent.LogAnalyzerAgent;
 import com.example.loganalyzer.agent.LogCollectorAgent;
 import com.example.loganalyzer.agent.ReportGeneratorAgent;
 import com.example.loganalyzer.tool.LogDownloaderTool;
+import dev.langchain4j.agentic.AgenticServices;
+import dev.langchain4j.agentic.observability.AgentListener;
+import dev.langchain4j.agentic.observability.AgentRequest;
+import dev.langchain4j.agentic.observability.AgentResponse;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.ollama.OllamaChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
-import dev.langchain4j.service.AiServices;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 
+/**
+ * Main application that orchestrates the log analysis pipeline.
+ * <p>
+ * Builds a sequential agent pipeline (collect, analyze, report) using
+ * {@link AgenticServices} and writes the resulting Markdown report to disk.
+ */
 public class LogAnalyzerApp {
 
     public static void main(String[] args) throws IOException {
@@ -29,30 +39,7 @@ public class LogAnalyzerApp {
             System.exit(1);
         }
 
-        String logUrl = args[0];
-        ChatModel model = createChatModel();
-
-        LogCollectorAgent logCollector = AiServices.builder(LogCollectorAgent.class)
-                .chatModel(model)
-                .tools(new LogDownloaderTool())
-                .build();
-
-        LogAnalyzerAgent logAnalyzer = AiServices.builder(LogAnalyzerAgent.class)
-                .chatModel(model)
-                .build();
-
-        ReportGeneratorAgent reportGenerator = AiServices.builder(ReportGeneratorAgent.class)
-                .chatModel(model)
-                .build();
-
-        System.out.println("=== Agent 1: Collecting logs from " + logUrl + " ===");
-        String rawLogs = logCollector.collectLogs(logUrl);
-
-        System.out.println("=== Agent 2: Analyzing log content ===");
-        String analysis = logAnalyzer.analyzeLogs(rawLogs);
-
-        System.out.println("=== Agent 3: Generating Markdown report ===");
-        String report = reportGenerator.generateReport(analysis);
+        String report = analyzeLogs(args[0], createChatModel());
 
         Path reportPath = Path.of("report.md");
         Files.writeString(reportPath, report);
@@ -60,6 +47,65 @@ public class LogAnalyzerApp {
         System.out.println("\n" + report);
     }
 
+    /**
+     * Runs the full log analysis pipeline: collect, analyze, and generate a Markdown report.
+     *
+     * @param logUrl the URL of the log file to process
+     * @param model  the chat model to use for all agents
+     * @return the generated Markdown report
+     * @throws IllegalArgumentException if {@code model} is null
+     */
+    public static String analyzeLogs(String logUrl, ChatModel model) {
+        if (model == null) {
+            throw new IllegalArgumentException("Chat model is null");
+        }
+
+        AgentListener listener = new AgentListener() {
+            @Override
+            public void beforeAgentInvocation(AgentRequest request) {
+                System.out.println(">>> Invoking agent: " + request.agentName() + " with inputs: " + request.inputs());
+            }
+
+            @Override
+            public void afterAgentInvocation(AgentResponse response) {
+                System.out.println("<<< Agent completed: " + response.agentName());
+            }
+        };
+
+        LogCollectorAgent logCollector = AgenticServices
+                .agentBuilder(LogCollectorAgent.class)
+                .chatModel(model)
+                .tools(new LogDownloaderTool())
+                .listener(listener)
+                .build();
+
+        LogAnalyzerAgent logAnalyzer = AgenticServices
+                .agentBuilder(LogAnalyzerAgent.class)
+                .chatModel(model)
+                .listener(listener)
+                .build();
+
+        ReportGeneratorAgent reportGenerator = AgenticServices
+                .agentBuilder(ReportGeneratorAgent.class)
+                .chatModel(model)
+                .listener(listener)
+                .build();
+
+        LogAgent logAgent = AgenticServices
+                .sequenceBuilder(LogAgent.class)
+                .subAgents(logCollector, logAnalyzer, reportGenerator)
+                .build();
+
+        System.out.println("=== Analyzing logs from " + logUrl + " ===");
+        return logAgent.processLogs(logUrl);
+    }
+
+    /**
+     * Creates a {@link ChatModel} based on environment variables.
+     * Supports OpenAI (default) and Ollama providers.
+     *
+     * @return a configured chat model
+     */
     static ChatModel createChatModel() {
         String provider = System.getenv().getOrDefault("LLM_PROVIDER", "openai");
 

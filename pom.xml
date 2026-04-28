@@ -15,8 +15,9 @@
     <properties>
         <maven.compiler.release>21</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <langchain4j.version>1.0.0</langchain4j.version>
-        <langchain4j-ollama.version>1.0.0-beta5</langchain4j-ollama.version>
+        <langchain4j.version>1.13.1</langchain4j.version>
+        <langchain4j-agentic.version>1.13.1-beta23</langchain4j-agentic.version>
+        <langchain4j-ollama.version>1.13.1</langchain4j-ollama.version>
         <testcontainers.version>1.21.3</testcontainers.version>
         <junit.version>5.11.0</junit.version>
     </properties>
@@ -27,6 +28,13 @@
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j</artifactId>
             <version>${langchain4j.version}</version>
+        </dependency>
+
+        <!-- langchain4j-agentic -->
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-agentic</artifactId>
+            <version>${langchain4j-agentic.version}</version>
         </dependency>
 
         <!-- OpenAI provider (main app) -->

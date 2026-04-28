@@ -1,13 +1,8 @@
 package com.example.loganalyzer;
 
-import com.example.loganalyzer.agent.LogAnalyzerAgent;
-import com.example.loganalyzer.agent.LogCollectorAgent;
-import com.example.loganalyzer.agent.ReportGeneratorAgent;
-import com.example.loganalyzer.tool.LogDownloaderTool;
 import com.sun.net.httpserver.HttpServer;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.ollama.OllamaChatModel;
-import dev.langchain4j.service.AiServices;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -23,6 +18,14 @@ import java.time.Duration;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
+/**
+ * Integration test for the full log analysis pipeline.
+ * <p>
+ * Uses Testcontainers to spin up an Ollama instance with a small model,
+ * serves sample log data via an embedded HTTP server, and verifies
+ * that {@link LogAnalyzerApp#analyzeLogs(String, ChatModel)} produces
+ * a non-empty Markdown report.
+ */
 @Testcontainers
 class LogAnalyzerPipelineIT {
 
@@ -55,6 +58,9 @@ class LogAnalyzerPipelineIT {
     static HttpServer logServer;
     static int logServerPort;
 
+    /**
+     * Pulls the Ollama model and starts an embedded HTTP server serving sample log content.
+     */
     @BeforeAll
     static void setUp() throws IOException, InterruptedException {
         ollama.execInContainer("ollama", "pull", MODEL_NAME);
@@ -78,6 +84,10 @@ class LogAnalyzerPipelineIT {
         }
     }
 
+    /**
+     * Verifies that the full pipeline produces a non-empty Markdown report
+     * containing analysis of the sample log data.
+     */
     @Test
     void fullPipelineProducesMarkdownReport() {
         ChatModel model = OllamaChatModel.builder()
@@ -86,30 +96,9 @@ class LogAnalyzerPipelineIT {
                 .timeout(Duration.ofMinutes(5))
                 .build();
 
-        LogCollectorAgent logCollector = AiServices.builder(LogCollectorAgent.class)
-                .chatModel(model)
-                .tools(new LogDownloaderTool())
-                .build();
+        String logUrl = "http://localhost:" + logServerPort + "/test.log";
 
-        LogAnalyzerAgent logAnalyzer = AiServices.builder(LogAnalyzerAgent.class)
-                .chatModel(model)
-                .build();
-
-        ReportGeneratorAgent reportGenerator = AiServices.builder(ReportGeneratorAgent.class)
-                .chatModel(model)
-                .build();
-
-        String logUrl = "http://host.testcontainers.internal:" + logServerPort + "/test.log";
-
-        String rawLogs = logCollector.collectLogs(logUrl);
-        assertNotNull(rawLogs);
-        assertFalse(rawLogs.isBlank(), "Raw logs should not be blank");
-
-        String analysis = logAnalyzer.analyzeLogs(rawLogs);
-        assertNotNull(analysis);
-        assertFalse(analysis.isBlank(), "Analysis should not be blank");
-
-        String report = reportGenerator.generateReport(analysis);
+        String report = LogAnalyzerApp.analyzeLogs(logUrl, model);
         assertNotNull(report);
         assertFalse(report.isBlank(), "Report should not be blank");
         System.out.println("=== Generated Report ===\n" + report);
